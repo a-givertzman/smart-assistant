@@ -61,19 +61,21 @@ fn main() -> Result<(), Error> {
 
     //
     // Checking args, embedding if "--update path" found then embedd new files
-    if let Some(update_from_path) = args.first() {
-        embedding(update_from_path, &model, &hnsw, &index)?;
-        let f = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&path);
-        match f {
-            Ok(mut f) => {
-                index.save_to(&mut f, index.max_nodes())
-                    .map_err(|err| error.pass(err.to_string()))?;
+    if let (Some(arg), Some(param)) = (args.get(1), args.get(2)) {
+        if arg == "--update" && !param.is_empty() {
+            embedding(param, &model, &hnsw, &index)?;
+            let f = OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&path);
+            match f {
+                Ok(mut f) => {
+                    index.save_to(&mut f, index.max_nodes())
+                        .map_err(|err| error.pass_with("Can't store Index", err.to_string()))?;
+                }
+                Err(err) => log::warn!("{dbg} | Can't store index into '{}', error: {:?}", path, err),
             }
-            Err(err) => log::warn!("{dbg} | Can't store index into '{}', error: {:?}", path, err),
         }
     }
 
@@ -88,7 +90,7 @@ fn main() -> Result<(), Error> {
                 // let v = vec![val; dim];
                 let t = Instant::now();
                 let hits = hnsw.search(&index, &query, 10, None)
-                    .map_err(|err| error.pass(err.to_string()))?;
+                    .map_err(|err| error.pass_with("Search error", err.to_string()))?;
                 let elapsed = t.elapsed();
                 log::debug!("Elapsed {:?}", elapsed);
                 log::debug!("Search hits [{}]:", hits.len());
