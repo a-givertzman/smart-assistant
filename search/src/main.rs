@@ -18,9 +18,6 @@ fn main() -> Result<(), Error> {
     let dbg = Dbg::own("main");
     let error = Error::new("", &dbg);
     let args: Vec<String> = std::env::args().collect();
-    println!("arg: {:?}", args.first());
-    std::process::exit(0);
-
 
     // Load a model from the Hugging Face Hub or a local path.
     // Arguments: (repo_or_path, hf_token, normalize_embeddings, subfolder_in_repo)
@@ -31,19 +28,21 @@ fn main() -> Result<(), Error> {
         None                            // Optional: subfolder if model files are not at the root of the repo/path
     ).map_err(|err| error.pass(err.to_string()))?;
 
-
+    //
+    // Loading hnsw
     let dim = 1024;
     let max_nodes = 10_000_000;
-
     let cfg = HnswConfig::new(dim, max_nodes)
         .m(48)
         .ef_construction(400)
         // Don't bake search accuracy into the index. Keep \(M\) moderate and adjust efSearch at query time to balance speed and accuracy.
         .ef_search(50);
-
     let hnsw = Hnsw::new(L2::new(), cfg);
+
+    //
+    // Loading Index
     let path = "./assets/index.bin";
-    let mut f = OpenOptions::new()
+    let f = OpenOptions::new()
         .read(true)
         .open(&path);
     let index = match f {
@@ -57,13 +56,18 @@ fn main() -> Result<(), Error> {
             InMemoryVectorStore::<f32>::new(dim, max_nodes)
         }
     };
+
+    //
+    // Checking args, embedding if "--update path" found then embedd new files
     if let Some(update_from_path) = args.first() {
         embedding(update_from_path, &model, &hnsw, &index)?;
-        let mut f = OpenOptions::new()
-            .read(true)
+        let f = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
             .open(&path);
         match f {
-            Ok(f) => {
+            Ok(mut f) => {
                 index.save_to(&mut f, index.max_nodes())
                     .map_err(|err| error.pass(err.to_string()))?;
             }
@@ -71,7 +75,6 @@ fn main() -> Result<(), Error> {
         }
     }
 
-    let values = 100_000;
     let t = Instant::now();
     let mut query = String::new();
     loop {
@@ -86,6 +89,10 @@ fn main() -> Result<(), Error> {
                     .map_err(|err| error.pass(err.to_string()))?;
                 let elapsed = t.elapsed();
                 log::debug!("Elapsed {:?}", elapsed);
+                log::debug!("Search hits [{}]:", hits.len());
+                for hit in hits {
+                    log::debug!("\t {:?}", hit);
+                }
             }
             Err(err) => log::warn!("{dbg} | Can't read query, error: \n\t{:?}", err),
         }
