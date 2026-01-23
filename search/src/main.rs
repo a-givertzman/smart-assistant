@@ -22,11 +22,13 @@ fn main() -> Result<(), Error> {
     // Load a model from the Hugging Face Hub or a local path.
     // Arguments: (repo_or_path, hf_token, normalize_embeddings, subfolder_in_repo)
     let model = StaticModel::from_pretrained(
-        "potion-multilingual-128M",  // Model ID from Hugging Face or local path to model directory
+        // "assets/potion-multilingual-128M",
+        "minishlab/potion-base-32M",
+        // "potion-multilingual-128M",  // Model ID from Hugging Face or local path to model directory
         None,                               // Optional: Hugging Face API token for private models
         None,                           // Optional: bool to override model's default normalization. `None` uses model's config.
         None                            // Optional: subfolder if model files are not at the root of the repo/path
-    ).map_err(|err| error.pass(err.to_string()))?;
+    ).map_err(|err| error.pass_with("Can't load StaticModel", err.to_string()))?;
 
     //
     // Loading hnsw
@@ -48,7 +50,7 @@ fn main() -> Result<(), Error> {
     let index = match f {
         Ok(mut f) => {
             let (index, _) = InMemoryVectorStore::<f32>::load_from(&mut f)
-                .map_err(|err| error.pass(err.to_string()))?;
+                .map_err(|err| error.pass_with(format!("Can't load index from '{}'", path), err.to_string()))?;
             index
         }
         Err(err) => {
