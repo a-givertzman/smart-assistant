@@ -63,19 +63,7 @@ fn main() -> Result<(), Error> {
     // Checking args, embedding if "--update path" found then embedd new files
     if let (Some(arg), Some(param)) = (args.get(1), args.get(2)) {
         if arg == "--update" && !param.is_empty() {
-            embedding(param, &model, &hnsw, &index)?;
-            let f = OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(&path);
-            match f {
-                Ok(mut f) => {
-                    index.save_to(&mut f, index.max_nodes())
-                        .map_err(|err| error.pass_with("Can't store Index", err.to_string()))?;
-                }
-                Err(err) => log::warn!("{dbg} | Can't store index into '{}', error: {:?}", path, err),
-            }
+            embedding(param, &path, &model, &hnsw, &index)?;
         }
     }
 
@@ -104,16 +92,17 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
-fn embedding(path: &str, model: &StaticModel, hnsw: &Hnsw<String, L2>, index: &InMemoryVectorStore<f32>) -> Result<(), Error> {
+fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<String, L2>, index: &InMemoryVectorStore<f32>) -> Result<(), Error> {
     let dbg = Dbg::own("embedding");
     let error = Error::new("", &dbg);
-    let path = PathBuf::from(path);
+    let path = PathBuf::from(src_path);
     if !path.is_dir() {
         log::warn!("{dbg} | Can't update from a single file '{}', specify the folder", path.display());
     }
     match std::fs::read_dir(&path) {
         Ok(dir) => {
             let t = Instant::now();
+            let mut transformed = 0;
             for path in dir {
                 if let Ok(path) = path {
                     let path = path.path();
@@ -134,6 +123,7 @@ fn embedding(path: &str, model: &StaticModel, hnsw: &Hnsw<String, L2>, index: &I
                                                 log::debug!("{dbg} | Embedding length: {}", embedding.len()); // -> Embeddings length: 4
                                                 hnsw.insert(index, key.to_owned(), &embedding)
                                                     .map_err(|err| error.pass(err.to_string()))?;
+                                                transformed += 1;
                                             }
                                             Err(err) => log::warn!("Can't read from {}, error: {:?}", path.display(), err),
                                         }
@@ -146,8 +136,25 @@ fn embedding(path: &str, model: &StaticModel, hnsw: &Hnsw<String, L2>, index: &I
                     }
                 }
             }
-            log::debug!("{dbg} | Elapsed: {:?}", t.elapsed());
-            Ok(())
+            if transformed > 0 {
+                log::debug!("{dbg} | Embedded {} chunks in: {:?}", transformed, t.elapsed());
+                let f = OpenOptions::new()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .open(&path);
+                match f {
+                    Ok(mut f) => {
+                        index
+                            .save_to(&mut f, index.max_nodes())
+                            .map_err(|err| error.pass_with("Can't store Index", err.to_string()))
+                    }
+                    Err(err) => Err(error.pass_with(format!("Can't store index into '{}'", index_path), err.to_string())),
+                }
+            } else {
+                log::warn!("{dbg} | Nothing embedded");
+                Ok(())
+            }
         }
         Err(err) => {
             Err(error.pass_with(format!("Can't read path '{}'", path.display()), err.to_string()))
