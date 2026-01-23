@@ -111,8 +111,8 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
                         if let Some(ext) = path.extension() {
                             let text = match ext.to_str() {
                                 Some(ext) => match ext {
-                                    "txt" => read_txt(path),
-                                    "pdf" => read_pdf(path),
+                                    "txt" => read_txt(&path),
+                                    "pdf" => read_pdf(&path),
                                     _ => Err(error.err(format!("File format '{}' - isn't supported", ext))),
                                 }
                                 None => Err(error.err(format!("Wrong file extension '{:?}' in {}", ext, path.display()))),
@@ -121,7 +121,7 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
                                 Ok(text) => {
                                     let key = path.to_str().unwrap();
                                     // Generate embeddings with the default batch size, 256
-                                    let embedding = model.encode_single(&doc);
+                                    let embedding = model.encode_single(&text);
                                     log::debug!("{dbg} | Embedding length: {}", embedding.len()); // -> Embeddings length: 4
                                     hnsw.insert(index, key.to_owned(), &embedding)
                                         .map_err(|err| error.pass(err.to_string()))?;
