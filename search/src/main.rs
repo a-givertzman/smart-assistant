@@ -136,7 +136,7 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
                 }
             }
             if transformed > 0 {
-                log::debug!("{dbg} | Embedded {} chunks in: {:?}", transformed, t.elapsed());
+                log::debug!("{dbg} | Embedded {} documents in: {:?}", transformed, t.elapsed());
                 let f = OpenOptions::new()
                     .create(true)
                     .truncate(true)
