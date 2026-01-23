@@ -186,8 +186,13 @@ fn read_pdf<P: AsRef<Path>>(path: P) -> Result<String, Error> {
         false => {
             let pages = doc.get_pages();
             let page_numbers: Vec<u32> = pages.keys().cloned().collect();
-            doc.extract_text(&page_numbers)
-                .map_err(|err| error.pass_with(format!("Can't extract text from '{}'", path.display()), err.to_string()))
+            match doc.extract_text(&page_numbers) {
+                Ok(text) => {
+                    std::fs::write(path.with_extension("txt"), text.as_bytes()).unwrap();
+                    Ok(text)
+                }
+                Err(err) => Err(error.pass_with(format!("Can't extract text from '{}'", path.display()), err.to_string()))
+            }
         }
     }
 }
