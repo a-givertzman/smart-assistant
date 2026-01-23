@@ -14,7 +14,7 @@ use sal_core::{dbg::Dbg, error::Error};
 fn main() -> Result<(), Error> {
     DebugSession::new()
         .filter(LogLevel::Debug)
-        .module("module-name::sub::path::Class", LogLevel::Info)
+        .module("lopdf", LogLevel::Info)
         .init();
     let dbg = Dbg::own("main");
     let error = Error::new("", &dbg);
@@ -34,7 +34,7 @@ fn main() -> Result<(), Error> {
     //
     // Loading hnsw
     let dim = 512;  // Because of `StaticModel` default DIM
-    let max_nodes = 10_000_000;
+    let max_nodes = 100;
     let cfg = HnswConfig::new(dim, max_nodes)
         .m(48)
         .ef_construction(400)
@@ -138,6 +138,7 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
             }
             if transformed > 0 {
                 log::debug!("{dbg} | Embedded {} documents in: {:?}", transformed, t.elapsed());
+                log::debug!("{dbg} | Index length: {:?}", index.max_nodes());
                 let f = OpenOptions::new()
                     .create(true)
                     .truncate(true)
@@ -146,7 +147,7 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
                 match f {
                     Ok(mut f) => {
                         index
-                            .save_to(&mut f, index.max_nodes())
+                            .save_to(&mut f, transformed)
                             .map_err(|err| error.pass_with("Can't store Index", err.to_string()))
                     }
                     Err(err) => Err(error.pass_with(format!("Can't store Index into '{}'", index_path), err.to_string())),
