@@ -18,6 +18,20 @@ fn main() -> Result<(), Error> {
     let dbg = Dbg::own("main");
     let error = Error::new("", &dbg);
     let args: Vec<String> = std::env::args().collect();
+    println!("arg: {:?}", args.first());
+    std::process::exit(0);
+
+
+    // Load a model from the Hugging Face Hub or a local path.
+    // Arguments: (repo_or_path, hf_token, normalize_embeddings, subfolder_in_repo)
+    let model = StaticModel::from_pretrained(
+        "potion-multilingual-128M",  // Model ID from Hugging Face or local path to model directory
+        None,                               // Optional: Hugging Face API token for private models
+        None,                           // Optional: bool to override model's default normalization. `None` uses model's config.
+        None                            // Optional: subfolder if model files are not at the root of the repo/path
+    ).map_err(|err| error.pass(err.to_string()))?;
+
+
     let dim = 1024;
     let max_nodes = 10_000_000;
 
@@ -28,7 +42,7 @@ fn main() -> Result<(), Error> {
         .ef_search(50);
 
     let hnsw = Hnsw::new(L2::new(), cfg);
-    let path = "./index.bin";
+    let path = "./assets/index.bin";
     let mut f = OpenOptions::new()
         .read(true)
         .open(&path);
@@ -44,56 +58,58 @@ fn main() -> Result<(), Error> {
         }
     };
     if let Some(update_from_path) = args.first() {
-        embedding(update_from_path, &hnsw, &index)?;
+        embedding(update_from_path, &model, &hnsw, &index)?;
+        let mut f = OpenOptions::new()
+            .read(true)
+            .open(&path);
+        match f {
+            Ok(f) => {
+                index.save_to(&mut f, index.max_nodes())
+                    .map_err(|err| error.pass(err.to_string()))?;
+            }
+            Err(err) => log::warn!("{dbg} | Can't store index into '{}', error: {:?}", path, err),
+        }
     }
 
     let values = 100_000;
-    let mut target = vec![];
     let t = Instant::now();
-    let total_ins = t.elapsed();
-
-    let mut total_query = Duration::ZERO;
-    for (key, val) in target {
-        let v = vec![val; dim];
-        let t = Instant::now();
-        let hits = hnsw.search(&index, &v, 10, None)
-            .map_err(|err| error.pass(err.to_string()))?;
-        let elapsed = t.elapsed();
-        total_query += elapsed;
-        log::debug!("Elapsed {:?}", elapsed);
-        assert_eq!(hits[0].key, key);
+    let mut query = String::new();
+    loop {
+        match std::io::stdin().read_line(&mut query) {
+            Ok(_) => {
+                log::debug!("Query     {:?}", query);
+                let query = model.encode_single(&query);
+                log::debug!("Embedding {:?}", query);
+                // let v = vec![val; dim];
+                let t = Instant::now();
+                let hits = hnsw.search(&index, &query, 10, None)
+                    .map_err(|err| error.pass(err.to_string()))?;
+                let elapsed = t.elapsed();
+                log::debug!("Elapsed {:?}", elapsed);
+            }
+            Err(err) => log::warn!("{dbg} | Can't read query, error: \n\t{:?}", err),
+        }
     }
-    log::debug!("Insertion Elapsed {:?}", total_ins);
-    log::debug!("Insertion Elapsed per query {:?}", total_ins / values);
-    log::debug!("Insertion Elapsed {:?}", total_query);
-    log::debug!("Insertion Elapsed per query {:?}", total_query / values);
     Ok(())
 }
 
-fn embedding(path: &str, hnsw: &Hnsw<String, L2>, index: &InMemoryVectorStore<f32>) -> Result<(), Error> {
+fn embedding(path: &str, model: &StaticModel, hnsw: &Hnsw<String, L2>, index: &InMemoryVectorStore<f32>) -> Result<(), Error> {
     let dbg = Dbg::own("embedding");
     let error = Error::new("", &dbg);
     let path = PathBuf::from(path);
     if !path.is_dir() {
         log::warn!("{dbg} | Can't update from a single file '{}', specify the folder", path.display());
     }
-    // Load a model from the Hugging Face Hub or a local path.
-    // Arguments: (repo_or_path, hf_token, normalize_embeddings, subfolder_in_repo)
-    let model = StaticModel::from_pretrained(
-        "potion-multilingual-128M",  // Model ID from Hugging Face or local path to model directory
-        None,                               // Optional: Hugging Face API token for private models
-        None,                           // Optional: bool to override model's default normalization. `None` uses model's config.
-        None                            // Optional: subfolder if model files are not at the root of the repo/path
-    ).map_err(|err| error.pass(err.to_string()))?;
     match std::fs::read_dir(&path) {
         Ok(dir) => {
+            let t = Instant::now();
             for path in dir {
                 if let Ok(path) = path {
                     let path = path.path();
                     if path.is_file() {
                         if let Some(ext) = path.extension() {
                             if ext == "txt" {
-                                let mut f = OpenOptions::new()
+                                let f = OpenOptions::new()
                                     .read(true)
                                     .open(&path);
                                 match f {
@@ -119,6 +135,7 @@ fn embedding(path: &str, hnsw: &Hnsw<String, L2>, index: &InMemoryVectorStore<f3
                     }
                 }
             }
+            log::debug!("{dbg} | Elapsed: {:?}", t.elapsed());
             Ok(())
         }
         Err(err) => {
