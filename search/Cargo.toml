@@ -24,3 +24,7 @@ serde_json = "~1.0"
 # HNSW ANN
 model2vec-rs = "~0.1"
 hnswlib-rs = "~0.10"
+
+#
+# Text instruments
+lopdf = "~0.39"

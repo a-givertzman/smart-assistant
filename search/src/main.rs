@@ -1,12 +1,13 @@
 mod hnsw;
 #[cfg(test)]
 mod tests;
-use std::{fs::OpenOptions, io::Read, path::PathBuf, time::{Duration, Instant}};
+use std::{fs::OpenOptions, io::Read, path::{Path, PathBuf}, time::{Duration, Instant}};
 
 use debugging::session::debug_session::{DebugSession, LogLevel};
 ///
 /// Search application entry point
 use hnswlib_rs::{Hnsw, HnswConfig, InMemoryVectorStore, L2};
+use lopdf::Document;
 use model2vec_rs::model::StaticModel;
 use sal_core::{dbg::Dbg, error::Error};
 
@@ -108,28 +109,26 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
                     let path = path.path();
                     if path.is_file() {
                         if let Some(ext) = path.extension() {
-                            if ext == "txt" {
-                                let f = OpenOptions::new()
-                                    .read(true)
-                                    .open(&path);
-                                match f {
-                                    Ok(mut f) => {
-                                        let mut doc = String::new();
-                                        match f.read_to_string(&mut doc) {
-                                            Ok(_) => {
-                                                let key = path.to_str().unwrap();
-                                                // Generate embeddings with the default batch size, 256
-                                                let embedding = model.encode_single(&doc);
-                                                log::debug!("{dbg} | Embedding length: {}", embedding.len()); // -> Embeddings length: 4
-                                                hnsw.insert(index, key.to_owned(), &embedding)
-                                                    .map_err(|err| error.pass(err.to_string()))?;
-                                                transformed += 1;
-                                            }
-                                            Err(err) => log::warn!("Can't read from {}, error: {:?}", path.display(), err),
-                                        }
-
-                                    }
-                                    Err(err) => log::warn!("Can't open {}, error: {:?}", path.display(), err),
+                            let text = match ext.to_str() {
+                                Some(ext) => match ext {
+                                    "txt" => read_txt(path),
+                                    "pdf" => read_pdf(path),
+                                    _ => Err(error.err(format!("File format '{}' - isn't supported", ext))),
+                                }
+                                None => Err(error.err(format!("Wrong file extension '{:?}' in {}", ext, path.display()))),
+                            };
+                            match text {
+                                Ok(text) => {
+                                    let key = path.to_str().unwrap();
+                                    // Generate embeddings with the default batch size, 256
+                                    let embedding = model.encode_single(&doc);
+                                    log::debug!("{dbg} | Embedding length: {}", embedding.len()); // -> Embeddings length: 4
+                                    hnsw.insert(index, key.to_owned(), &embedding)
+                                        .map_err(|err| error.pass(err.to_string()))?;
+                                    transformed += 1;
+                                }
+                                Err(err) => {
+                                    log::warn!("Can't read pdf {}, error: {:?}", path.display(), err);
                                 }
                             }
                         }
@@ -158,6 +157,37 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
         }
         Err(err) => {
             Err(error.pass_with(format!("Can't read path '{}'", path.display()), err.to_string()))
+        }
+    }
+}
+///
+/// Reads TXT into String
+fn read_txt<P: AsRef<Path>>(path: P) -> Result<String, Error> {
+    let path = path.as_ref();
+    let dbg = Dbg::own("read_txt");
+    let error = Error::new("", &dbg);
+    let mut doc = String::new();
+    let mut f = OpenOptions::new().read(true).open(&path)
+        .map_err(|err| error.pass_with(format!("Can't open '{}'", path.display()), err.to_string()))?;
+    f.read_to_string(&mut doc)
+        .map_err(|err| error.pass_with(format!("Can't read from '{}'", path.display()), err.to_string()))?;
+    Ok(doc)
+}
+    ///
+/// Reads PDF into String
+fn read_pdf<P: AsRef<Path>>(path: P) -> Result<String, Error> {
+    let path = path.as_ref();
+    let dbg = Dbg::own("read_pdf");
+    let error = Error::new("", &dbg);
+    let doc = Document::load(path)
+        .map_err(|err| error.pass_with(format!("Can't read '{}'", path.display()), err.to_string()))?;
+    match doc.is_encrypted() {
+        true => Err(error.err(format!("Can't read encripted pdf '{}'", path.display()))),
+        false => {
+            let pages = doc.get_pages();
+            let page_numbers: Vec<u32> = pages.keys().cloned().collect();
+            doc.extract_text(&page_numbers)
+                .map_err(|err| error.pass_with(format!("Can't extract text from '{}'", path.display()), err.to_string()))
         }
     }
 }
