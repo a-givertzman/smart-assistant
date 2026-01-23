@@ -124,11 +124,11 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
                                     let embedding = model.encode_single(&text);
                                     log::debug!("{dbg} | Embedding length: {}", embedding.len()); // -> Embeddings length: 4
                                     hnsw.insert(index, key.to_owned(), &embedding)
-                                        .map_err(|err| error.pass(err.to_string()))?;
+                                        .map_err(|err| error.pass_with(format!("Can't insert into the Index"), err.to_string()))?;
                                     transformed += 1;
                                 }
                                 Err(err) => {
-                                    log::warn!("Can't read pdf {}, error: {:?}", path.display(), err);
+                                    log::warn!("Can't read file {}, error: {:?}", path.display(), err);
                                 }
                             }
                         }
@@ -141,14 +141,14 @@ fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<
                     .create(true)
                     .truncate(true)
                     .write(true)
-                    .open(&path);
+                    .open(&index_path);
                 match f {
                     Ok(mut f) => {
                         index
                             .save_to(&mut f, index.max_nodes())
                             .map_err(|err| error.pass_with("Can't store Index", err.to_string()))
                     }
-                    Err(err) => Err(error.pass_with(format!("Can't store index into '{}'", index_path), err.to_string())),
+                    Err(err) => Err(error.pass_with(format!("Can't store Index into '{}'", index_path), err.to_string())),
                 }
             } else {
                 log::warn!("{dbg} | Nothing embedded");
@@ -188,7 +188,7 @@ fn read_pdf<P: AsRef<Path>>(path: P) -> Result<String, Error> {
             let page_numbers: Vec<u32> = pages.keys().cloned().collect();
             match doc.extract_text(&page_numbers) {
                 Ok(text) => {
-                    std::fs::write(path.with_extension("txt"), text.as_bytes()).unwrap();
+                    // std::fs::write(path.with_extension("txt"), text.as_bytes()).unwrap();
                     Ok(text)
                 }
                 Err(err) => Err(error.pass_with(format!("Can't extract text from '{}'", path.display()), err.to_string()))
