@@ -76,7 +76,7 @@ fn main() -> Result<(), Error> {
             Ok(_) => {
                 log::debug!("Query     {:?}", query);
                 let query = model.encode_single(&query);
-                log::debug!("Embedding {:?}", query);
+                log::debug!("Query embedding {:?}", query);
                 // let v = vec![val; dim];
                 let t = Instant::now();
                 let hits = hnsw.search(&index, &query, 10, None)
@@ -92,7 +92,8 @@ fn main() -> Result<(), Error> {
         }
     }
 }
-
+///
+/// Transforms documents from `src_path` into vectors and storing the Index
 fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<String, L2>, index: &InMemoryVectorStore<f32>) -> Result<(), Error> {
     let dbg = Dbg::own("embedding");
     let error = Error::new("", &dbg);
