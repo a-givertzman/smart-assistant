@@ -32,7 +32,7 @@ fn main() -> Result<(), Error> {
 
     //
     // Loading hnsw
-    let dim = 1024;
+    let dim = 512;  // Because of `StaticModel` default DIM
     let max_nodes = 10_000_000;
     let cfg = HnswConfig::new(dim, max_nodes)
         .m(48)
@@ -70,6 +70,7 @@ fn main() -> Result<(), Error> {
     let t = Instant::now();
     let mut query = String::new();
     loop {
+        println!("Type your search query: ");
         match std::io::stdin().read_line(&mut query) {
             Ok(_) => {
                 log::debug!("Query     {:?}", query);
@@ -89,7 +90,6 @@ fn main() -> Result<(), Error> {
             Err(err) => log::warn!("{dbg} | Can't read query, error: \n\t{:?}", err),
         }
     }
-    Ok(())
 }
 
 fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<String, L2>, index: &InMemoryVectorStore<f32>) -> Result<(), Error> {
