@@ -1,7 +1,8 @@
+mod domain;
 mod hnsw;
 #[cfg(test)]
 mod tests;
-use std::{fs::OpenOptions, io::Read, path::{Path, PathBuf}, time::{Duration, Instant}};
+use std::{fs::OpenOptions, io::Read, path::{Path, PathBuf}, sync::Arc, time::Instant};
 
 use debugging::session::debug_session::{DebugSession, LogLevel};
 use hnsw_rs::{hnsw::Hnsw, hnswio::HnswIo, prelude::DistCosine};
@@ -9,7 +10,7 @@ use lopdf::Document;
 use model2vec_rs::model::StaticModel;
 use sal_core::{dbg::Dbg, error::Error};
 
-use crate::hnsw::{Index, Meta};
+use crate::{domain::Eval, hnsw::{EmbeddedQuery, Index, Meta, ModelClient, ModelQuery, Search, Server, Terminator}};
 
 ///
 /// Search application entry point
@@ -24,19 +25,21 @@ fn main() -> Result<(), Error> {
 
     // Load a model from the Hugging Face Hub or a local path.
     // Arguments: (repo_or_path, hf_token, normalize_embeddings, subfolder_in_repo)
-    let model = StaticModel::from_pretrained(
+    let model = Arc::new(StaticModel::from_pretrained(
         // "minishlab/potion-base-32M",                     // Model ID from Hugging Face or local path to model directory
         "minishlab/potion-multilingual-128M",
         None,                               // Optional: Hugging Face API token for private models
         None,                           // Optional: bool to override model's default normalization. `None` uses model's config.
         None                            // Optional: subfolder if model files are not at the root of the repo/path
-    ).map_err(|err| error.pass_with("Can't load StaticModel", err.to_string()))?;
+    ).map_err(|err| error.pass_with("Can't load StaticModel", err.to_string()))?);
 
+    let server_addr = "127.0.0.1:8181";  // Ip addres of current TCP Server
+    let model_addr = "192.168.10.12:8585";  // Ip addres of the LLM Model Server
     //
     // Loading hnsw
     let dim = 256;  // Because of `StaticModel` default DIM
-    let nb_elem = 250;      // Temporary buffer size that determines how many candidate neighbors are kept while building or updating the HNSW graph.
-    let max_nb_connection = 24;
+    let nb_elem = 450;      // Temporary buffer size that determines how many candidate neighbors are kept while building or updating the HNSW graph.
+    let max_nb_connection = 48;
     let nb_layer = 16.min((nb_elem as f32).ln().trunc() as usize);
     let ef_construction = 400;
     let ef_search = 256;     // controls the width of the search in the lowest level, it must be greater than number of neighbours asked, more then 300 is not efficent
@@ -52,33 +55,52 @@ fn main() -> Result<(), Error> {
     let dump_dir = Path::new("./assets/");
     let dump_name = "dump";
     let mut hnswio = HnswIo::new(dump_dir, dump_name);
-    let (mut index, mut hnsw) = match dump_dir.join(dump_name).is_file() {
+    let (index, hnsw) = match dump_dir.join(dump_name).is_file() {
         true => {
-            let hnsw = hnswio.load_hnsw()
+            let mut hnsw = hnswio.load_hnsw()
                 .map_err(|err| error.pass_with(format!("Can't load HNSW dump '{}'", path), err.to_string()))?;
+            hnsw.set_extend_candidates(false);
+            hnsw.modify_level_scale(1.00);
             let index = Index::load(path)
                 .map_err(|err| error.pass_with(format!("Can't load index from '{}'", path), err.to_string()))?;
-            (index, hnsw)
+            (Arc::new(index), Arc::new(hnsw))
         }
         false => {
-            log::warn!("{dbg} | Can't find hnsw dump '{}'", dump_dir.join(dump_name).display());
-            (
-                Index::new(path),
-                Hnsw::<f32, DistCosine>::new(max_nb_connection, nb_elem, nb_layer, ef_construction, DistCosine {})
-            )
+            log::info!("{dbg} | Can't find hnsw dump '{}'", dump_dir.join(dump_name).display());
+            let mut hnsw = Hnsw::<f32, DistCosine>::new(max_nb_connection, nb_elem, nb_layer, ef_construction, DistCosine {});
+            hnsw.set_extend_candidates(false);
+            hnsw.modify_level_scale(1.00);
+            let mut index = Index::new(path);
+            //
+            // Checking args, embedding if "--update path" found then embedd new files
+            if let (Some(arg), Some(param)) = (args.get(1), args.get(2)) {
+                if arg == "--update" && !param.is_empty() {
+                    embedding(param, dump_dir, dump_name, &model, &hnsw, &mut index)?;
+                }
+            }
+            (Arc::new(index), Arc::new(hnsw))
         }
     };
-    hnsw.set_extend_candidates(false);
-    //
-    hnsw.modify_level_scale(0.25);
 
-    //
-    // Checking args, embedding if "--update path" found then embedd new files
-    if let (Some(arg), Some(param)) = (args.get(1), args.get(2)) {
-        if arg == "--update" && !param.is_empty() {
-            embedding(param, dump_dir, dump_name, &model, &hnsw, &mut index)?;
-        }
-    }
+    let ctx = Server::new(
+        server_addr,
+        ModelClient::new(
+            model_addr,
+            ModelQuery::new(
+                Search::new(
+                    search_knbn,
+                    ef_search,
+                    index.clone(),
+                    hnsw.clone(),
+                    EmbeddedQuery::new(
+                        model.clone(),
+                        Terminator::new(),
+                    ),
+                )
+            )
+        )
+    ).eval(());
+
 
     let t = Instant::now();
     loop {
