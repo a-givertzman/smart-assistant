@@ -4,15 +4,13 @@ mod tests;
 use std::{fs::OpenOptions, io::Read, path::{Path, PathBuf}, time::{Duration, Instant}};
 
 use debugging::session::debug_session::{DebugSession, LogLevel};
-use hnsw_rs::{api::AnnT, hnsw::Hnsw, hnswio::HnswIo, prelude::DistCosine};
+///
+/// Search application entry point
+use hnswlib_rs::{Hnsw, HnswConfig, InMemoryVectorStore, L2};
 use lopdf::Document;
 use model2vec_rs::model::StaticModel;
 use sal_core::{dbg::Dbg, error::Error};
 
-use crate::hnsw::{Index, Meta};
-
-///
-/// Search application entry point
 fn main() -> Result<(), Error> {
     DebugSession::new()
         .filter(LogLevel::Debug)
@@ -35,46 +33,37 @@ fn main() -> Result<(), Error> {
     //
     // Loading hnsw
     let dim = 256;  // Because of `StaticModel` default DIM
-    let nb_elem = 250;      // Temporary buffer size that determines how many candidate neighbors are kept while building or updating the HNSW graph.
-    let max_nb_connection = 24;
-    let nb_layer = 16.min((nb_elem as f32).ln().trunc() as usize);
-    let ef_construction = 400;
-    let ef_search = 256;     // controls the width of the search in the lowest level, it must be greater than number of neighbours asked, more then 300 is not efficent
-    let search_knbn = 10;
-    println!(
-        " number of elements to insert {:?} , setting max nb layer to {:?} ef_construction {:?}",
-        nb_elem, nb_layer, ef_construction
-    );
+    let max_nodes = 100;
+    let cfg = HnswConfig::new(dim, max_nodes)
+        .m(48)
+        .ef_construction(400)
+        // Don't bake search accuracy into the index. Keep \(M\) moderate and adjust efSearch at query time to balance speed and accuracy.
+        .ef_search(50);
+    let hnsw = Hnsw::new(L2::new(), cfg);
 
     //
     // Loading Index
-    let path = "./assets/index.json";
-    let dump_dir = Path::new("./assets/");
-    let dump_name = "dump";
-    let mut hnswio = HnswIo::new(dump_dir, dump_name);
-    let (mut index, mut hnsw) = match hnswio.load_hnsw() {
-        Ok(hnsw) => {
-            let index = Index::load(path)
+    let path = "./assets/index.bin";
+    let f = OpenOptions::new()
+        .read(true)
+        .open(&path);
+    let index = match f {
+        Ok(mut f) => {
+            let (index, _) = InMemoryVectorStore::<f32>::load_from(&mut f)
                 .map_err(|err| error.pass_with(format!("Can't load index from '{}'", path), err.to_string()))?;
-            (index, hnsw)
+            index
         }
         Err(err) => {
-            log::warn!("{dbg} | Can't read hnsw from '{}', error: \n\t{:?}", dump_dir.join(dump_name).display(), err);
-            (
-                Index::new(path),
-                Hnsw::<f32, DistCosine>::new(max_nb_connection, nb_elem, nb_layer, ef_construction, DistCosine {})
-            )
+            log::warn!("{dbg} | Can't read index from '{}', error: \n\t{:?}", path, err);
+            InMemoryVectorStore::<f32>::new(dim, max_nodes)
         }
     };
-    hnsw.set_extend_candidates(false);
-    //
-    hnsw.modify_level_scale(0.25);
 
     //
     // Checking args, embedding if "--update path" found then embedd new files
     if let (Some(arg), Some(param)) = (args.get(1), args.get(2)) {
         if arg == "--update" && !param.is_empty() {
-            embedding(param, dump_dir, dump_name, &model, &hnsw, &mut index)?;
+            embedding(param, &path, &model, &hnsw, &index)?;
         }
     }
 
@@ -90,7 +79,8 @@ fn main() -> Result<(), Error> {
                 log::debug!("Query embedding {:?}", query);
                 // let v = vec![val; dim];
                 let t = Instant::now();
-                let hits = hnsw.search(&query, search_knbn, ef_search);
+                let hits = hnsw.search(&index, &query, 10, None)
+                    .map_err(|err| error.pass_with("Search error", err.to_string()))?;
                 let elapsed = t.elapsed();
                 log::debug!("Elapsed {:?}", elapsed);
                 log::debug!("Search hits [{}]:", hits.len());
@@ -104,7 +94,7 @@ fn main() -> Result<(), Error> {
 }
 ///
 /// Transforms documents from `src_path` into vectors and storing the Index
-fn embedding(src_path: &str, dump_dir: &Path, dump_name: &str, model: &StaticModel, hnsw: &Hnsw<f32, DistCosine>, index: &mut Index) -> Result<(), Error> {
+fn embedding(src_path: &str, index_path: &str, model: &StaticModel, hnsw: &Hnsw<String, L2>, index: &InMemoryVectorStore<f32>) -> Result<(), Error> {
     let dbg = Dbg::own("embedding");
     let error = Error::new("", &dbg);
     let path = PathBuf::from(src_path);
@@ -130,12 +120,12 @@ fn embedding(src_path: &str, dump_dir: &Path, dump_name: &str, model: &StaticMod
                             };
                             match text {
                                 Ok(text) => {
-                                    let meta = Meta::new(path.to_str().unwrap(), path.to_str().unwrap());
-                                    let key = index.insert(meta);
+                                    let key = path.to_str().unwrap();
                                     // Generate embeddings with the default batch size, 256
                                     let embedding = model.encode_single(&text);
-                                    log::debug!("{dbg} | Embedding length: {}", embedding.len());
-                                    hnsw.insert_slice((&embedding, key));
+                                    log::debug!("{dbg} | Embedding length: {}", embedding.len()); // -> Embeddings length: 4
+                                    hnsw.insert(index, key.to_owned(), &embedding)
+                                        .map_err(|err| error.pass_with(format!("Can't insert into the Index"), err.to_string()))?;
                                     transformed += 1;
                                 }
                                 Err(err) => {
@@ -148,10 +138,20 @@ fn embedding(src_path: &str, dump_dir: &Path, dump_name: &str, model: &StaticMod
             }
             if transformed > 0 {
                 log::debug!("{dbg} | Embedded {} documents in: {:?}", transformed, t.elapsed());
-                index.store()?;
-                hnsw.file_dump(dump_dir, dump_name)
-                    .map(|dump| log::debug!("HNSW Graph stored to {dump}"))
-                    .map_err(|err| error.pass_with("Can't store HNSW Graph", err.to_string()))
+                log::debug!("{dbg} | Index length: {:?}", index.max_nodes());
+                let f = OpenOptions::new()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .open(&index_path);
+                match f {
+                    Ok(mut f) => {
+                        index
+                            .save_to(&mut f, transformed)
+                            .map_err(|err| error.pass_with("Can't store Index", err.to_string()))
+                    }
+                    Err(err) => Err(error.pass_with(format!("Can't store Index into '{}'", index_path), err.to_string())),
+                }
             } else {
                 log::warn!("{dbg} | Nothing embedded");
                 Ok(())
