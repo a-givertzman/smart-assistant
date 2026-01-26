@@ -23,10 +23,8 @@ fn main() -> Result<(), Error> {
     // Load a model from the Hugging Face Hub or a local path.
     // Arguments: (repo_or_path, hf_token, normalize_embeddings, subfolder_in_repo)
     let model = StaticModel::from_pretrained(
-        // "assets/potion-multilingual-128M",
-        // "minishlab/potion-base-32M",
+        // "minishlab/potion-base-32M",                     // Model ID from Hugging Face or local path to model directory
         "minishlab/potion-multilingual-128M",
-        // "potion-multilingual-128M",  // Model ID from Hugging Face or local path to model directory
         None,                               // Optional: Hugging Face API token for private models
         None,                           // Optional: bool to override model's default normalization. `None` uses model's config.
         None                            // Optional: subfolder if model files are not at the root of the repo/path
