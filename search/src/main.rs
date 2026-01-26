@@ -96,9 +96,9 @@ fn main() -> Result<(), Error> {
                         model.clone(),
                         Terminator::new(),
                     ),
-                )
-            )
-        )
+                ),
+            ),
+        ),
     ).eval(());
 
 
