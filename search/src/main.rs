@@ -24,7 +24,8 @@ fn main() -> Result<(), Error> {
     // Arguments: (repo_or_path, hf_token, normalize_embeddings, subfolder_in_repo)
     let model = StaticModel::from_pretrained(
         // "assets/potion-multilingual-128M",
-        "minishlab/potion-base-32M",
+        // "minishlab/potion-base-32M",
+        "minishlab/potion-multilingual-128M",
         // "potion-multilingual-128M",  // Model ID from Hugging Face or local path to model directory
         None,                               // Optional: Hugging Face API token for private models
         None,                           // Optional: bool to override model's default normalization. `None` uses model's config.
@@ -33,7 +34,7 @@ fn main() -> Result<(), Error> {
 
     //
     // Loading hnsw
-    let dim = 512;  // Because of `StaticModel` default DIM
+    let dim = 256;  // Because of `StaticModel` default DIM
     let max_nodes = 100;
     let cfg = HnswConfig::new(dim, max_nodes)
         .m(48)
@@ -69,11 +70,12 @@ fn main() -> Result<(), Error> {
     }
 
     let t = Instant::now();
-    let mut query = String::new();
     loop {
+        let mut query = String::new();
         println!("Type your search query: ");
         match std::io::stdin().read_line(&mut query) {
             Ok(_) => {
+                let query = query.trim();
                 log::debug!("Query     {:?}", query);
                 let query = model.encode_single(&query);
                 log::debug!("Query embedding {:?}", query);
@@ -190,7 +192,7 @@ fn read_pdf<P: AsRef<Path>>(path: P) -> Result<String, Error> {
             let page_numbers: Vec<u32> = pages.keys().cloned().collect();
             match doc.extract_text(&page_numbers) {
                 Ok(text) => {
-                    // std::fs::write(path.with_extension("txt"), text.as_bytes()).unwrap();
+                    std::fs::write(path.with_extension("txt"), text.as_bytes()).unwrap();
                     Ok(text)
                 }
                 Err(err) => Err(error.pass_with(format!("Can't extract text from '{}'", path.display()), err.to_string()))
