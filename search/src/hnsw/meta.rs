@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 ///
 /// Contains database fields about document
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meta {
     pub name: String,
     pub path: String,

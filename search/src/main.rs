@@ -4,7 +4,7 @@ mod tests;
 use std::{fs::OpenOptions, io::Read, path::{Path, PathBuf}, time::{Duration, Instant}};
 
 use debugging::session::debug_session::{DebugSession, LogLevel};
-use hnsw_rs::{api::AnnT, hnsw::Hnsw, hnswio::HnswIo, prelude::DistCosine};
+use hnsw_rs::{hnsw::Hnsw, hnswio::HnswIo, prelude::DistCosine};
 use lopdf::Document;
 use model2vec_rs::model::StaticModel;
 use sal_core::{dbg::Dbg, error::Error};
@@ -52,14 +52,16 @@ fn main() -> Result<(), Error> {
     let dump_dir = Path::new("./assets/");
     let dump_name = "dump";
     let mut hnswio = HnswIo::new(dump_dir, dump_name);
-    let (mut index, mut hnsw) = match hnswio.load_hnsw() {
-        Ok(hnsw) => {
+    let (mut index, mut hnsw) = match dump_dir.join(dump_name).is_file() {
+        true => {
+            let hnsw = hnswio.load_hnsw()
+                .map_err(|err| error.pass_with(format!("Can't load HNSW dump '{}'", path), err.to_string()))?;
             let index = Index::load(path)
                 .map_err(|err| error.pass_with(format!("Can't load index from '{}'", path), err.to_string()))?;
             (index, hnsw)
         }
-        Err(err) => {
-            log::warn!("{dbg} | Can't read hnsw from '{}', error: \n\t{:?}", dump_dir.join(dump_name).display(), err);
+        false => {
+            log::warn!("{dbg} | Can't find hnsw dump '{}'", dump_dir.join(dump_name).display());
             (
                 Index::new(path),
                 Hnsw::<f32, DistCosine>::new(max_nb_connection, nb_elem, nb_layer, ef_construction, DistCosine {})
@@ -90,7 +92,10 @@ fn main() -> Result<(), Error> {
                 log::debug!("Query embedding {:?}", query);
                 // let v = vec![val; dim];
                 let t = Instant::now();
-                let hits = hnsw.search(&query, search_knbn, ef_search);
+                let hits: Vec<(usize, f32, Option<Meta>)> = hnsw.search(&query, search_knbn, ef_search)
+                    .iter().map(|h| {
+                        (h.d_id, h.distance, index.get(h.d_id).cloned())
+                    }).collect();
                 let elapsed = t.elapsed();
                 log::debug!("Elapsed {:?}", elapsed);
                 log::debug!("Search hits [{}]:", hits.len());
@@ -149,9 +154,10 @@ fn embedding(src_path: &str, dump_dir: &Path, dump_name: &str, model: &StaticMod
             if transformed > 0 {
                 log::debug!("{dbg} | Embedded {} documents in: {:?}", transformed, t.elapsed());
                 index.store()?;
-                hnsw.file_dump(dump_dir, dump_name)
-                    .map(|dump| log::debug!("HNSW Graph stored to {dump}"))
-                    .map_err(|err| error.pass_with("Can't store HNSW Graph", err.to_string()))
+                // hnsw.file_dump(dump_dir, dump_name)
+                //     .map(|dump| log::debug!("HNSW Graph stored to {dump}"))
+                //     .map_err(|err| error.pass_with("Can't store HNSW Graph", err.to_string()))
+                Ok(())
             } else {
                 log::warn!("{dbg} | Nothing embedded");
                 Ok(())
