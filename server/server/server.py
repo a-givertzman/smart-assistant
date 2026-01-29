@@ -22,9 +22,11 @@ class Server:
         while True:
             client, client_addr = server.accept()
             log.debug(f'{self.dbg}.run | Connection from {client_addr}')
-            while True:
+            if client:
                 bytes = client.recv(1024)
-                query = bytes.decode(encoding="utf-8")
-                log.debug(f'{self.dbg}.run | Query: {query}')
+                query = bytes.decode(encoding="utf-8").strip()
+                # log.debug(f'{self.dbg}.run | Query: {query}')
                 reply = self.queries(query)
-                client.sendall(reply)
+                # log.debug(f'{self.dbg}.run | Reply: {reply}')
+                client.sendall(reply.encode(encoding="utf-8"))
+                client.close()
