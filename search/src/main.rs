@@ -55,7 +55,7 @@ fn main() -> Result<(), Error> {
     let dump_dir = Path::new("./assets/");
     let dump_name = "dump";
     let mut hnswio = HnswIo::new(dump_dir, dump_name);
-    let (index, hnsw) = match dump_dir.join(dump_name).is_file() {
+    let (index, hnsw) = match dump_dir.join(format!("{}.hnsw.data", dump_name)).is_file() && dump_dir.join(format!("{}.hnsw.graph", dump_name)).is_file() {
         true => {
             let mut hnsw = hnswio.load_hnsw()
                 .map_err(|err| error.pass_with(format!("Can't load HNSW dump '{}'", path), err.to_string()))?;
@@ -66,7 +66,7 @@ fn main() -> Result<(), Error> {
             (Arc::new(index), Arc::new(hnsw))
         }
         false => {
-            log::info!("{dbg} | Can't find hnsw dump '{}'", dump_dir.join(dump_name).display());
+            log::info!("{dbg} | Can't find hnsw data dump '{}' and hnsw graph dump {}", dump_dir.join(format!("{}.hnsw.data", dump_name)).display(), dump_dir.join(format!("{}.hnsw.graph", dump_name)).display());
             let mut hnsw = Hnsw::<f32, DistCosine>::new(max_nb_connection, nb_elem, nb_layer, ef_construction, DistCosine {});
             hnsw.set_extend_candidates(false);
             hnsw.modify_level_scale(1.00);
