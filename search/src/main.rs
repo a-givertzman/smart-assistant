@@ -1,4 +1,5 @@
 mod domain;
+mod embedding;
 mod hnsw;
 #[cfg(test)]
 mod tests;
