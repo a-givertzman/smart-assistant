@@ -37,12 +37,22 @@ fn subject() {
     let test_data = [
         (
             1,
-            ""
+            "D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\pdf-test-1.pdf"
+        ),
+        (
+            2,
+            "D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\pdf-test-2.pdf"
         )
     ];
     for (step, text_path) in test_data {
-        let result = TextExtractionEval::new().eval(text_path.to_owned());
-        // assert!(result == target, "{dbg} | step {step} \nresult: {:?}\ntarget: {:?}", result, target);
+        match TextExtractionEval::new().eval(text_path.to_owned()) {
+            Ok(result) => {
+                std::fs::File::create(format!("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\output_files\\result_{:?}.html", step)).unwrap();
+                std::fs::write(format!("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\output_files\\result_{:?}.html", step), result).unwrap();
+                // assert!(result == target, "{dbg} | step {step} \nresult: {:?}\ntarget: {:?}", result, target);
+            },
+            Err(e) => log::error!("{}", format!("Step: {:?} Error to parse file: {:?}", step, e)),
+        }
     }
     test_duration.exit();
 }

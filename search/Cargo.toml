@@ -36,4 +36,4 @@ lopdf = "~0.39"
 
 #
 # PDF OCR
-tesseract = "0.13"
+pdf_oxide = "~0.3"
