@@ -26,6 +26,9 @@ impl TextExtractionEval {
 
         }
     }
+    ///
+    /// Parsing text from PDF file
+    /// by crate [pdf_oxide]
     fn extract_pdf(&self, path: &Path) -> Result<String, Error> {
         match pdf_oxide::PdfDocument::open(path) {
             Ok(doc) => {
@@ -56,6 +59,9 @@ impl TextExtractionEval {
             Err(e) => Err(Error::from(format!("Error to open pdf file: {:?}", e))) 
         }
     }
+    ///
+    /// Parsing text from DOCX file
+    /// by crate [rdocx]
     fn extract_docx(&self, path: &Path) -> Result<String, Error> {
         match rdocx::Document::open(path) {
             Ok(doc) => {
@@ -64,6 +70,9 @@ impl TextExtractionEval {
             Err(e) => Err(Error::from(format!("Error to open docx file: {:?}", e)))
         }
     }
+    ///
+    /// Parsing HTML file
+    /// by crate [scraper]
     fn extract_html(&self, path: &Path) -> Result<String, Error> {
         match std::fs::read_to_string(path) {
             Ok(html) => {
