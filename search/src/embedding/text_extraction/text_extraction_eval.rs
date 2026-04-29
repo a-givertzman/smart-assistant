@@ -65,7 +65,13 @@ impl TextExtractionEval {
         }
     }
     fn extract_html(&self, path: &Path) -> Result<String, Error> {
-        Err(Error::from("Error to extract from html"))
+        match std::fs::read_to_string(path) {
+            Ok(html) => {
+                    let html_text_result = scraper::Html::parse_document(&html);
+                    return Ok(html_text_result.html());
+            },
+            Err(e) => Err(Error::from(format!("Error to read html file: {:?}", e)))
+        }
     }
 }
 //

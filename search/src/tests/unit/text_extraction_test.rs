@@ -51,6 +51,10 @@ fn subject() {
         (
             4,
             PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\docx-test-2.docx") // не парсится гистограмма
+        ),
+        (
+            5,
+            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\html-test-1.html")
         )
     ];
     for (step, text_path) in test_data {
