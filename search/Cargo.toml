@@ -33,7 +33,5 @@ ndarray = "~0.17"
 #
 # Text instruments
 lopdf = "~0.39"
-
-#
-# PDF OCR
 pdf_oxide = "~0.3"
+rdocx = "~0.1"

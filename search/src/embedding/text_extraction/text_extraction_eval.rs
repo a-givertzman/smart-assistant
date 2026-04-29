@@ -1,5 +1,14 @@
-use std::path::{Path, PathBuf};
-use pdf_oxide::{PdfDocument, converters::{ConversionOptions, ReadingOrderMode}, pipeline::BoldMarkerBehavior};
+use std::path::{
+    Path, 
+    PathBuf
+};
+use pdf_oxide::{
+    converters::{
+        ConversionOptions, 
+        ReadingOrderMode
+    }, 
+    pipeline::BoldMarkerBehavior
+};
 use sal_core::error::Error;
 use crate::domain::Eval;
 ///
@@ -18,7 +27,7 @@ impl TextExtractionEval {
         }
     }
     fn extract_pdf(&self, path: &Path) -> Result<String, Error> {
-        match PdfDocument::open(path) {
+        match pdf_oxide::PdfDocument::open(path) {
             Ok(doc) => {
                 match doc.to_html_all(
                     &ConversionOptions {
@@ -48,7 +57,12 @@ impl TextExtractionEval {
         }
     }
     fn extract_docx(&self, path: &Path) -> Result<String, Error> {
-        Err(Error::from("Error to extract from docx"))
+        match rdocx::Document::open(path) {
+            Ok(doc) => {
+                return  Ok(doc.to_html())
+            },
+            Err(e) => Err(Error::from(format!("Error to open docx file: {:?}", e)))
+        }
     }
     fn extract_html(&self, path: &Path) -> Result<String, Error> {
         Err(Error::from("Error to extract from html"))
@@ -56,14 +70,13 @@ impl TextExtractionEval {
 }
 //
 //
-impl Eval<String,  Result<String, Error>> for TextExtractionEval {
-    fn eval(&self, val: String) ->  Result<String, Error> {
-        let path = PathBuf::from(&val);
-        match path.extension().and_then(|s| s.to_str()) {
-            Some("pdf") => self.extract_pdf(&path),
-            Some("docx") => self.extract_docx(&path),
-            Some("html") | Some("htm") => self.extract_html(&path),
-            Some("txt") => Ok(std::fs::read_to_string(path).unwrap_or_default()),
+impl Eval<PathBuf,  Result<String, Error>> for TextExtractionEval {
+    fn eval(&self, file_path: PathBuf) ->  Result<String, Error> {
+        match file_path.extension().and_then(|s| s.to_str()) {
+            Some("pdf") => self.extract_pdf(&file_path),
+            Some("docx") => self.extract_docx(&file_path),
+            Some("html") | Some("htm") => self.extract_html(&file_path),
+            Some("txt") => Ok(std::fs::read_to_string(file_path).unwrap_or_default()),
             _ => panic!("Unsupported file format"),
         }
     }

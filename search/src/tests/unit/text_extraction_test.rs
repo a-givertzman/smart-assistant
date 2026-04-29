@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 #[cfg(test)]
 use std::{sync::Once, time::{Duration, Instant}};
 use sal_core::dbg::Dbg;
@@ -37,18 +38,28 @@ fn subject() {
     let test_data = [
         (
             1,
-            "D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\pdf-test-1.pdf"
+            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\pdf-test-1.pdf") // неправильная структура САМОГО ФАЙЛА
         ),
         (
             2,
-            "D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\pdf-test-2.pdf"
+            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\pdf-test-2.pdf")
+        ),
+        (
+            3,
+            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\docx-test-1.docx")
+        ),
+        (
+            4,
+            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\docx-test-2.docx") // не парсится гистограмма
         )
     ];
     for (step, text_path) in test_data {
-        match TextExtractionEval::new().eval(text_path.to_owned()) {
+        match TextExtractionEval::new().eval(text_path.clone()) {
             Ok(result) => {
-                std::fs::File::create(format!("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\output_files\\result_{:?}.html", step)).unwrap();
-                std::fs::write(format!("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\output_files\\result_{:?}.html", step), result).unwrap();
+                let file_extenstion = text_path.extension().and_then(|s| s.to_str()).expect("Wrong file extension!");
+                let result_file_path = format!("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\output_files\\result_{}_{:?}.html", file_extenstion, step);
+                std::fs::File::create(&result_file_path).unwrap();
+                std::fs::write(&result_file_path, result).unwrap();
                 // assert!(result == target, "{dbg} | step {step} \nresult: {:?}\ntarget: {:?}", result, target);
             },
             Err(e) => log::error!("{}", format!("Step: {:?} Error to parse file: {:?}", step, e)),
