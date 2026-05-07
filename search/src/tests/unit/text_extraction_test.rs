@@ -5,7 +5,7 @@ use sal_core::dbg::Dbg;
 use testing::stuff::max_test_duration::TestDuration;
 use debugging::session::debug_session::{DebugSession, LogLevel, Backtrace};
 
-use crate::{domain::Eval, embedding::text_extraction::text_extraction_eval::TextExtractionEval};
+use crate::{domain::Eval, embedding::text_extraction::TextExtraction};
 ///
 ///
 static INIT: Once = Once::new();
@@ -23,7 +23,7 @@ fn init_each() -> () {}
 ///
 /// Testing such functionality / behavior
 #[test]
-fn subject() {
+fn text_extraction() {
     DebugSession::new()
         .filter(LogLevel::Debug)
         .module("module-name::sub::path::Class", LogLevel::Info)
@@ -33,35 +33,43 @@ fn subject() {
     log::debug!("");
     let dbg = Dbg::own("search-test-subject");
     log::debug!("\n{dbg}");
-    let test_duration = TestDuration::new(dbg, Duration::from_secs(1));
+    let test_duration = TestDuration::new(dbg, Duration::from_secs(10));
     test_duration.run().unwrap();
     let test_data = [
         (
             1,
-            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\pdf-test-1.pdf") // неправильная структура САМОГО ФАЙЛА
+            PathBuf::from("/home/klaimmor/pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-bionic-x86_64.AppImage"),
+            PathBuf::from("/mnt/d/work_projects/smart-assistant/search/src/tests/unit/test_files/pdf-test-1.pdf")
         ),
         (
             2,
-            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\pdf-test-2.pdf")
+            PathBuf::from("/home/klaimmor/pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-bionic-x86_64.AppImage"),
+            PathBuf::from("/mnt/d/work_projects/smart-assistant/search/src/tests/unit/test_files/pdf-test-2.pdf")
         ),
         (
             3,
-            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\docx-test-1.docx")
+            PathBuf::from("/home/klaimmor/pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-bionic-x86_64.AppImage"),
+            PathBuf::from("/mnt/d/work_projects/smart-assistant/search/src/tests/unit/test_files/docx-test-1.docx")
         ),
         (
             4,
-            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\docx-test-2.docx") // не парсится гистограмма
+            PathBuf::from("/home/klaimmor/pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-bionic-x86_64.AppImage"),
+            PathBuf::from("/mnt/d/work_projects/smart-assistant/search/src/tests/unit/test_files/docx-test-2.docx")
         ),
         (
             5,
-            PathBuf::from("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\test_files\\html-test-1.html")
+            PathBuf::from("/home/klaimmor/pdf2htmlEX-0.18.8.rc1-master-20200630-Ubuntu-bionic-x86_64.AppImage"),
+            PathBuf::from("/mnt/d/work_projects/smart-assistant/search/src/tests/unit/test_files/html-test-1.html")
         )
     ];
-    for (step, text_path) in test_data {
-        match TextExtractionEval::new().eval(text_path.clone()) {
+    for (step, path_to_pdf2htmlex, text_path) in test_data {
+        match TextExtraction::new(
+            text_path.clone(),
+            path_to_pdf2htmlex,
+        ).eval(()) {
             Ok(result) => {
                 let file_extenstion = text_path.extension().and_then(|s| s.to_str()).expect("Wrong file extension!");
-                let result_file_path = format!("D:\\work_projects\\smart-assistant\\search\\src\\tests\\unit\\output_files\\result_{}_{:?}.html", file_extenstion, step);
+                let result_file_path = format!("/mnt/d/work_projects/smart-assistant/search/src/tests/unit/output_files/result_{}_{:?}.html", file_extenstion, step);
                 std::fs::File::create(&result_file_path).unwrap();
                 std::fs::write(&result_file_path, result).unwrap();
                 // assert!(result == target, "{dbg} | step {step} \nresult: {:?}\ntarget: {:?}", result, target);
