@@ -33,3 +33,7 @@ ndarray = "~0.17"
 #
 # Text instruments
 lopdf = "~0.39"
+pdf_oxide = "~0.3"
+rdocx = "~0.1"
+scraper = "~0.26.0"
+pandoc = "0.8.11"
